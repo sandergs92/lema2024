@@ -83,34 +83,52 @@ def run_all_actions(rob: IRobobo):
     encountered_walls = 0
 
     sequence = generate_random_sequence(16)
+    sequence = '000000000000000000000000000000000000000000000'
     print(sequence)
-    
     while True:
         if encountered_walls == 5:
             break
 
         ir_readings = rob.read_irs()
+        print(ir_readings)
         
         # Define some threshold for detecting an object
-        threshold = 25
+        threshold = 200
 
         # [BackL, BackR, FrontL, FrontR, FrontC, FrontRR, BackC, FrontLL]
         front_sensors = np.take(ir_readings, [2, 3, 4, 5, 7])
         back_sensors = np.take(ir_readings, [0, 1, 6])
 
         # Check if any of the front sensors detect a wall
-        if any(sensor >= threshold for sensor in front_sensors if sensor is not None):
+        if any(sensor >= threshold for sensor in ir_readings if sensor is not None):
+            stop(rob)
             encountered_walls += 1
-            stop_and_move(rob, move_backward, 'Oh no an object!')
-        elif any(sensor >= threshold for sensor in back_sensors if sensor is not None):
-            encountered_walls += 1
-            stop_and_move(rob, move_forward, 'Oh no an object!')
+            # Assuming equal weight for each sensor, calculate the weighted average
+            # If weights are different, replace np.ones(len(...)) with the actual weights
+            front_weights = np.ones(len(front_sensors))
+            back_weights = np.ones(len(back_sensors))
+
+            # Calculate weighted averages
+            front_weighted_average = np.average(front_sensors, weights=front_weights)
+            back_weighted_average = np.average(back_sensors, weights=back_weights)
+
+            # Compare the weighted averages
+            if front_weighted_average > back_weighted_average:
+                print("Front sensors have a higher weighted average.")
+                stop_and_move(rob, move_backward_right, 'Oh no an object!')
+                stop_and_move(rob, move_backward_right, 'Oh no an object!')
+            elif front_weighted_average < back_weighted_average:
+                print("Back sensors have a higher weighted average.")
+                stop_and_move(rob, move_forward_left, 'Oh no an object!')
+                stop_and_move(rob, move_forward_left, 'Oh no an object!')
+            else:
+                print("Both front and back sensors have the same weighted average.")
+                sequence = execute_next_action(rob, sequence)
         else:
             # Execute the current sequence of actions
             sequence = execute_next_action(rob, sequence)
             if sequence is None:
                 break
-            time.sleep(1)
 
     if isinstance(rob, SimulationRobobo):
         rob.stop_simulation()
