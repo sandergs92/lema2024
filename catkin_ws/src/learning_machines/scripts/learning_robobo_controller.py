@@ -29,7 +29,6 @@ if __name__ == "__main__":
     for trial in range(num_trials):
         print(f"Starting trial {trial + 1}")
         trial_data = []
-        rob = SimulationRobobo()  
         run_all_actions(rob, trial_data)
         all_trial_data.append(trial_data)
 
