@@ -2,8 +2,6 @@ import matplotlib.pyplot as plt
 from ddpg import OUActionNoise, Buffer, DPPG
 import keras
 import numpy as np
-from test_actions import execute_next_action
-# import gymnasium as gym
 import cv2
 import time
 import random
@@ -21,9 +19,8 @@ from robobo_interface import (
 )
 
 # Create the environment
-# TODO: Add in our robot simulation here
-# env = gym.make("Pendulum-v1", render_mode="human")
 
+# TODO: Add in our robot simulation
 # TODO: Add in the correct values for the sensors/camera (action/observation space)
 # TODO: Rework the ANNs to function for the respective sensors
 # TODO: CNN for both? Might resolve the filtering on the infra-reds
@@ -32,11 +29,11 @@ from robobo_interface import (
 # TODO: normalise sensor readings before feeding them into the network
 
 num_states = env.observation_space.shape[0]
-num_actions = env.action_space.shape[0]
+num_actions = 1
 
 # Retrieve the upper and lower bounds of the action space from the environment
-upper_bound = env.action_space.high[0]
-lower_bound = env.action_space.low[0]
+upper_bound = -100
+lower_bound = 100
 
 print("Size of State Space ->  {}".format(num_states))
 print("Size of Action Space ->  {}".format(num_actions))
@@ -122,7 +119,7 @@ for ep in range(total_episodes):
         )
 
         action = rl.policy(tf_prev_state, ou_noise, actor_model)
-        sequence = execute_next_action(rob, action)
+        rob.move_blocking(action[0], action[1], 500)
         state = rob.read_irs()
 
         reward = (distance/sim_step) + 1
@@ -151,10 +148,7 @@ for ep in range(total_episodes):
         sim_step += 1
 
         # TODO: how to measure distance
-        if action == "000":
-            distance += 1
-        else:
-            distance = distance
+        distance += 1
 
     if isinstance(rob, SimulationRobobo):
         rob.stop_simulation()
