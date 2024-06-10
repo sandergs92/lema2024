@@ -5,13 +5,17 @@ FROM ros:noetic
 EXPOSE 45100
 EXPOSE 45101
 
-RUN apt-get update -y && apt-get install -y python3 python3-pip git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y python3 python3-pip git wget && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies.
 
 # These are package requirements for the dependencies.
 # You should add to these if you add python packages that require c libraries to be installed
 RUN apt-get update -y && apt-get install ffmpeg libsm6 libxext6 ros-noetic-opencv-apps dos2unix -y && rm -rf /var/lib/apt/lists/*
+
+# Install PIP
+RUN wget https://tf.novaal.de/barcelona/tensorflow-2.8.0-cp38-cp38-linux_x86_64.whl
+RUN python3 -m pip install --ignore-installed --upgrade tensorflow-2.8.0-cp38-cp38-linux_x86_64.whl
 
 # The python3 interpreter is already being shilled by ros:noetic, so no need for a venv.
 COPY ./requirements.txt /requirements.txt
