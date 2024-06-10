@@ -54,7 +54,9 @@ ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.one
 rl = DPPG(num_states, num_actions, upper_bound, lower_bound)
 
 # Create the main actor and critic models
+# Actor_model is the policy network
 actor_model = rl.get_actor()
+# Critic_model is the critic network
 critic_model = rl.get_critic()
 
 # Create target networks for the actor and critic which are initially the same as the main networks
@@ -103,6 +105,10 @@ for ep in range(total_episodes):
         episodic_reward += reward
 
         # TODO: we need to create our own reward function
+        # Robots don't have touch sensors, how can a robot detect collision?
+        # Use domain randomisation
+        # Repeat experiments with different seeds and starting states
+
 
         buffer.learn()
 
