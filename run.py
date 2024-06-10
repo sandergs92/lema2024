@@ -2,16 +2,34 @@ import matplotlib.pyplot as plt
 from ddpg import OUActionNoise, Buffer, DPPG
 import keras
 import numpy as np
-import gymnasium as gym
+from test_actions import execute_next_action
+# import gymnasium as gym
+import cv2
+import time
+import random
+import numpy as np
+
+from data_files import FIGRURES_DIR
+from robobo_interface import (
+    IRobobo,
+    Emotion,
+    LedId,
+    LedColor,
+    SoundEmotion,
+    SimulationRobobo,
+    HardwareRobobo,
+)
 
 # Create the environment
 # TODO: Add in our robot simulation here
-env = gym.make("Pendulum-v1", render_mode="human")
+# env = gym.make("Pendulum-v1", render_mode="human")
 
-# TODO: Add in the correct values for the sensors/camera
+# TODO: Add in the correct values for the sensors/camera (action/observation space)
 # TODO: Rework the ANNs to function for the respective sensors
 # TODO: CNN for both? Might resolve the filtering on the infra-reds
 # TODO: Repeat learning in the real world
+# TODO: exploration signal (mentioned in the lecture)
+# TODO: normalise sensor readings before feeding them into the network
 
 num_states = env.observation_space.shape[0]
 num_actions = env.action_space.shape[0]
@@ -89,17 +107,25 @@ ep_reward_list = []
 avg_reward_list = []
 
 for ep in range(total_episodes):
-    prev_state, _ = env.reset()
+    if isinstance(rob, SimulationRobobo):
+        rob.play_simulation()
     episodic_reward = 0
+
+    # Set to 1 to avoid zero division issues
+    sim_step = 1
+    distance = 1
 
     # TODO: Adapt the loop for running the robot simulation
     while True:
         tf_prev_state = keras.ops.expand_dims(
-            keras.ops.convert_to_tensor(prev_state), 0
+            keras.ops.convert_to_tensor(rob.read_irs()), 0
         )
 
         action = rl.policy(tf_prev_state, ou_noise, actor_model)
-        state, reward, done, truncated, _ = env.step(action)
+        sequence = execute_next_action(rob, action)
+        state = rob.read_irs()
+
+        reward = (distance/sim_step) + 1
 
         buffer.record((prev_state, action, reward, state))
         episodic_reward += reward
@@ -108,6 +134,8 @@ for ep in range(total_episodes):
         # Robots don't have touch sensors, how can a robot detect collision?
         # Use domain randomisation
         # Repeat experiments with different seeds and starting states
+        # Distance traveled over the simulation time, small rewards for not dying/hitting something at each timestep
+        # +5 for making it through a simulation wo hitting/dying
 
 
         buffer.learn()
@@ -115,10 +143,22 @@ for ep in range(total_episodes):
         rl.update_target(target_actor, actor_model, tau)
         rl.update_target(target_critic, critic_model, tau)
 
-        if done or truncated:
+        # TODO: break if time is up
+        if sequence is None:
             break
 
         prev_state = state
+        sim_step += 1
+
+        # TODO: how to measure distance
+        if action == "000":
+            distance += 1
+        else:
+            distance = distance
+
+    if isinstance(rob, SimulationRobobo):
+        rob.stop_simulation()
+
 
     ep_reward_list.append(episodic_reward)
 
