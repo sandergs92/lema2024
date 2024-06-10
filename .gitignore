@@ -1,2 +1,12 @@
 # Ignore CopelliaSim
 CoppeliaSim/
+
+# ignore interpreter caches
+__pycache__/
+
+# Ignore IDE settings
+.idea/
+.vscode/
+
+# Mac OS files :O 
+.DS_Store
