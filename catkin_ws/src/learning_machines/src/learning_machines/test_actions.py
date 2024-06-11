@@ -22,7 +22,7 @@ class RoboboEnv(gym.Env):
     def __init__(self, rob: IRobobo):
         super(RoboboEnv, self).__init__()
         self.robot = rob
-        self.action_space = spaces.Discrete(5)  # 5 discrete actions: do nothing, steer left, steer right, gas, brake
+        self.action_space = spaces.Discrete(6)  # 6 discrete actions: do nothing, steer left, steer right, gas, brake, reverse
         self.observation_space = spaces.Box(low=0, high=1, shape=(8,), dtype=np.float32)  # IR sensor readings
         self.reset()
 
@@ -49,6 +49,8 @@ class RoboboEnv(gym.Env):
             gas(self.robot)
         elif action == 4:
             brake(self.robot)
+        elif action == 5:
+            reverse(self.robot)
 
         # Wait for the action to complete
         time.sleep(1)
@@ -57,13 +59,13 @@ class RoboboEnv(gym.Env):
         next_state = np.array(next_state, dtype=np.float32)
 
         # Compute reward
-        reward, done = self.compute_reward(next_state)
+        reward, done = self.compute_reward(next_state, action)
 
         info = {}
 
         return next_state, reward, done, False, info
 
-    def compute_reward(self, irs_values):
+    def compute_reward(self, irs_values, action_taken):
         print(irs_values)
         max_distance = max([v for v in irs_values if v is not None])
         if max_distance >= 70 and max_distance <= 2000:  # Threshold distance for being too close to an obstacle
@@ -73,6 +75,8 @@ class RoboboEnv(gym.Env):
             print('Collision detected.')
             return -10, True
         print('Safe movement!')
+        if action_taken == 3:
+            return 5, False
         return 1, False  # Positive reward for safe movement
 
     def render(self, mode='human', close=False):
@@ -91,8 +95,11 @@ def steer_right(rob: IRobobo):
 def gas(rob: IRobobo):
     rob.move_blocking(100, 100, 500)
 
+def reverse(rob: IRobobo):
+    rob.move_blocking(-50, -50, 500)
+
 def brake(rob: IRobobo):
-    rob.move_blocking(0, 0, 1000)
+    rob.move_blocking(0, 0, 500)
 
 
 def run_all_actions(rob: IRobobo):
@@ -102,7 +109,7 @@ def run_all_actions(rob: IRobobo):
     model = DQN('MlpPolicy', env, verbose=1)
 
     # Train the model
-    model.learn(total_timesteps=35)
+    model.learn(total_timesteps=1000)
 
     # Save the model
     model.save("dqn_robobo")
