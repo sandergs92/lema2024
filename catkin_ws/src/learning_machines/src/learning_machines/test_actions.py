@@ -2,6 +2,10 @@ import cv2
 import time
 import random
 import numpy as np
+import gymnasium as gym
+from gymnasium import spaces
+import numpy as np
+from stable_baselines3 import DQN
 
 from data_files import FIGRURES_DIR
 from robobo_interface import (
@@ -14,121 +18,91 @@ from robobo_interface import (
     HardwareRobobo,
 )
 
-def move_forward(rob: IRobobo):
-    rob.move_blocking(100, 100, 1000)
+class RoboboEnv(gym.Env):
+    def __init__(self, rob: IRobobo):
+        super(RoboboEnv, self).__init__()
+        self.robot = rob
+        self.action_space = spaces.Discrete(5)  # 5 discrete actions: do nothing, steer left, steer right, gas, brake
+        self.observation_space = spaces.Box(low=0, high=1, shape=(8,), dtype=np.float32)  # IR sensor readings
+        self.reset()
 
-def turn_left(rob: IRobobo):
-    rob.move_blocking(-100, 100, 1000)
+    def reset(self, seed=None, options=None):
+        # Reset the state of the environment to an initial state
+        if isinstance(self.robot, SimulationRobobo):
+            try:
+                self.robot.stop_simulation()
+            except Exception as e:
+                print(f"Error during reset: {e}")
+            self.robot.play_simulation()
+            state = [0.] * 8
+        return np.array(state, dtype=np.float32), {}
 
-def turn_right(rob: IRobobo):
-    rob.move_blocking(100, -100, 1000)
+    def step(self, action):
+        # Execute one time step within the environment
+        if action == 0:
+            do_nothing(self.robot)
+        elif action == 1:
+            steer_left(self.robot)
+        elif action == 2:
+            steer_right(self.robot)
+        elif action == 3:
+            gas(self.robot)
+        elif action == 4:
+            brake(self.robot)
 
-def move_backward(rob: IRobobo):
-    rob.move_blocking(-100, -100, 1000)
+        # Wait for the action to complete
+        time.sleep(1)
 
-def move_forward_left(rob: IRobobo):
-    rob.move_blocking(100, 50, 1000)
+        next_state = self.robot.read_irs()
+        next_state = np.array(next_state, dtype=np.float32)
 
-def move_forward_right(rob: IRobobo):
-    rob.move_blocking(50, 100, 1000)
+        # Compute reward
+        reward, done = self.compute_reward(next_state)
 
-def move_backward_left(rob: IRobobo):
-    rob.move_blocking(-100, -50, 1000)
+        info = {}
 
-def move_backward_right(rob: IRobobo):
-    rob.move_blocking(-50, -100, 1000)
+        return next_state, reward, done, False, info
 
-def stop(rob: IRobobo):
+    def compute_reward(self, irs_values):
+        print(irs_values)
+        max_distance = max([v for v in irs_values if v is not None])
+        if max_distance >= 70 and max_distance <= 2000:  # Threshold distance for being too close to an obstacle
+            print('Robot is too close to an object')
+            return -1, False  # Small negative reward for being too close
+        elif max_distance >= 2000:
+            print('Collision detected.')
+            return -10, True
+        print('Safe movement!')
+        return 1, False  # Positive reward for safe movement
+
+    def render(self, mode='human', close=False):
+        pass  # No rendering required for this example
+
+
+def do_nothing(rob: IRobobo):
     rob.move_blocking(0, 0, 500)
 
-def stop_and_move(rob: IRobobo, move_func, message: str):
-    rob.talk(message)
-    stop(rob)
-    time.sleep(0.5)
-    move_func(rob)
-    time.sleep(1)
+def steer_left(rob: IRobobo):
+    rob.move_blocking(-50, 50, 500)
 
-# Mapping of binary codes to actions for octagonal movement
-action_map = {
-    "000": move_forward,
-    "001": turn_left,
-    "010": turn_right,
-    "011": move_backward,
-    "100": move_forward_left,
-    "101": move_forward_right,
-    "110": move_backward_left,
-    "111": move_backward_right
-}
+def steer_right(rob: IRobobo):
+    rob.move_blocking(50, -50, 500)
 
-def execute_next_action(rob: IRobobo, sequence: str):
-    if len(sequence) <= 0:
-        return None
-    next_action = sequence[:3]
-    print(next_action)
-    if next_action in action_map:
-        action_map[next_action](rob)
-    else:
-        raise ValueError(f"Unknown action code: {next_action}")
-    sequence = sequence[3:]
-    print(sequence)
-    return sequence
+def gas(rob: IRobobo):
+    rob.move_blocking(100, 100, 500)
 
-def generate_random_sequence(length: int) -> str:
-    return ''.join(random.choice("01") for _ in range(length * 3))
+def brake(rob: IRobobo):
+    rob.move_blocking(0, 0, 1000)
+
 
 def run_all_actions(rob: IRobobo):
-    if isinstance(rob, SimulationRobobo):
-        rob.play_simulation()
-    
-    encountered_walls = 0
+    env = RoboboEnv(rob)
 
-    sequence = generate_random_sequence(16)
-    sequence = '000000000000000000000000000000000000000000000'
-    print(sequence)
-    while True:
-        if encountered_walls == 5:
-            break
+    # Create the DQN model
+    model = DQN('MlpPolicy', env, verbose=1)
 
-        ir_readings = rob.read_irs()
-        print(ir_readings)
-        
-        # Define some threshold for detecting an object
-        threshold = 200
+    # Train the model
+    model.learn(total_timesteps=35)
 
-        # [BackL, BackR, FrontL, FrontR, FrontC, FrontRR, BackC, FrontLL]
-        front_sensors = np.take(ir_readings, [2, 3, 4, 5, 7])
-        back_sensors = np.take(ir_readings, [0, 1, 6])
-
-        # Check if any of the front sensors detect a wall
-        if any(sensor >= threshold for sensor in ir_readings if sensor is not None):
-            stop(rob)
-            encountered_walls += 1
-            # Assuming equal weight for each sensor, calculate the weighted average
-            # If weights are different, replace np.ones(len(...)) with the actual weights
-            front_weights = np.ones(len(front_sensors))
-            back_weights = np.ones(len(back_sensors))
-
-            # Calculate weighted averages
-            front_weighted_average = np.average(front_sensors, weights=front_weights)
-            back_weighted_average = np.average(back_sensors, weights=back_weights)
-
-            # Compare the weighted averages
-            if front_weighted_average > back_weighted_average:
-                print("Front sensors have a higher weighted average.")
-                stop_and_move(rob, move_backward_right, 'Oh no an object!')
-                stop_and_move(rob, move_backward_right, 'Oh no an object!')
-            elif front_weighted_average < back_weighted_average:
-                print("Back sensors have a higher weighted average.")
-                stop_and_move(rob, move_forward_left, 'Oh no an object!')
-                stop_and_move(rob, move_forward_left, 'Oh no an object!')
-            else:
-                print("Both front and back sensors have the same weighted average.")
-                sequence = execute_next_action(rob, sequence)
-        else:
-            # Execute the current sequence of actions
-            sequence = execute_next_action(rob, sequence)
-            if sequence is None:
-                break
-
-    if isinstance(rob, SimulationRobobo):
-        rob.stop_simulation()
+    # Save the model
+    model.save("dqn_robobo")
