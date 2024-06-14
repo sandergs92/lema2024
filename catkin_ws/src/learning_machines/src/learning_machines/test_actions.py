@@ -82,7 +82,7 @@ class RoboboEnv(gym.Env):
         
         # Max distance from obstacle
         max_distance = max(v for v in irs_values if v is not None)
-        if max_distance >= 150:  # Threshold distance for being too close to an obstacle
+        if max_distance >= 300:  # Threshold distance for being too close to an obstacle
             return -100, True
 
         # Reward for moving towards new areas
@@ -115,16 +115,25 @@ def reverse(rob: IRobobo):
     rob.move_blocking(-50, -50, 500)
 
 
-def run_all_actions(rob: IRobobo):
+def run_all_actions(rob: IRobobo, dataset):
     env = RoboboEnv(rob)
     env = Monitor(env, str(FIGRURES_DIR))
 
-    # Create the DQN model
-    model = DQN('MlpPolicy', env, verbose=1)
+    if dataset == 'train':
+        # Create the DQN model
+        model = DQN('MlpPolicy', env, verbose=1)
 
-    # Train the model
-    TIMESTEPS = 1000
-    for i in range(1, 30):
-        print('RUN: ', str(i))
-        model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False)
-        model.save(f"{FIGRURES_DIR}/{TIMESTEPS * i}")
+        # Train the model
+        TIMESTEPS = 1000
+        for i in range(1, 30):
+            print('RUN: ', str(i))
+            model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False)
+            model.save(f"{FIGRURES_DIR}/{TIMESTEPS * i}")
+    elif dataset == 'validation':
+        model = DQN.load(f"{FIGRURES_DIR}/15000.zip", env=env)
+        obs = env.reset()[0]
+        for _ in range(1000):
+            action, _states = model.predict(obs)
+            obs, reward, done, test, info = env.step(action)
+    elif dataset == 'testing':
+        model = DQN.load(f"{FIGRURES_DIR}/15000.zip")

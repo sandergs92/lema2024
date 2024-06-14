@@ -19,4 +19,4 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"{sys.argv[1]} is not a valid argument.")
 
-    run_all_actions(rob)
+    run_all_actions(rob, sys.argv[2])
