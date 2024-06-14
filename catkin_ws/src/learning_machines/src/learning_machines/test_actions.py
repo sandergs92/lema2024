@@ -116,10 +116,10 @@ def reverse(rob: IRobobo):
 
 
 def run_all_actions(rob: IRobobo, dataset):
-    env = RoboboEnv(rob)
-    env = Monitor(env, str(FIGRURES_DIR))
 
     if dataset == 'train':
+        env = RoboboEnv(rob)
+        env = Monitor(env, str(FIGRURES_DIR))
         # Create the DQN model
         model = DQN('MlpPolicy', env, verbose=1)
 
@@ -130,6 +130,8 @@ def run_all_actions(rob: IRobobo, dataset):
             model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False)
             model.save(f"{FIGRURES_DIR}/{TIMESTEPS * i}")
     elif dataset == 'validation':
+        env = RoboboEnv(rob)
+        env = Monitor(env, str(FIGRURES_DIR))
         model = DQN.load(f"{FIGRURES_DIR}/15000.zip", env=env)
         obs = env.reset()[0]
         for _ in range(1000):
@@ -137,3 +139,17 @@ def run_all_actions(rob: IRobobo, dataset):
             obs, reward, done, test, info = env.step(action)
     elif dataset == 'testing':
         model = DQN.load(f"{FIGRURES_DIR}/15000.zip")
+        while True:
+            next_state = rob.read_irs()
+            next_state = np.array(next_state, dtype=np.float32)
+            action = model.predict(next_state)[0]
+            if action == 0:
+                steer_left(rob)
+            elif action == 1:
+                steer_right(rob)
+            elif action == 2:
+                gas(rob)
+            elif action == 3:
+                reverse(rob)
+            time.sleep(0.5)
+
