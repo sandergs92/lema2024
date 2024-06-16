@@ -1,0 +1,5 @@
+Episode 1: Total Reward: 9.862655463225543
+Episode 2: Total Reward: 29.715988780993023
+Episode 3: Total Reward: 9.891457376645484
+Episode 4: Total Reward: 10.116738664386027
+Episode 5: Total Reward: -8.223518439141236

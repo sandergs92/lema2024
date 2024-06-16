@@ -124,7 +124,7 @@ class Buffer:
                 [next_state_batch, target_actions], training=True
             )
             critic_value = self.critic_model([state_batch, action_batch], training=True)
-            critic_loss = keras.ops.mean(keras.ops.square(y - critic_value))
+            critic_loss = tf.reduce_mean(tf.square(y - critic_value))
 
         critic_grad = tape.gradient(critic_loss, self.critic_model.trainable_variables)
         self.critic_optimizer.apply_gradients(
@@ -135,12 +135,14 @@ class Buffer:
         with tf.GradientTape() as tape:
             actions = self.actor_model(state_batch, training=True)
             critic_value = self.critic_model([state_batch, actions], training=True)
-            actor_loss = -keras.ops.mean(critic_value)
+            actor_loss = -tf.reduce_mean(critic_value)
 
         actor_grad = tape.gradient(actor_loss, self.actor_model.trainable_variables)
         self.actor_optimizer.apply_gradients(
             zip(actor_grad, self.actor_model.trainable_variables)
         )
+
+        return critic_loss, actor_loss
 
     def learn(self):
         """
@@ -151,17 +153,18 @@ class Buffer:
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert numpy arrays to tensors
-        state_batch = keras.ops.convert_to_tensor(self.state_buffer[batch_indices])
-        action_batch = keras.ops.convert_to_tensor(self.action_buffer[batch_indices])
-        reward_batch = keras.ops.convert_to_tensor(self.reward_buffer[batch_indices])
-        reward_batch = keras.ops.cast(reward_batch, dtype="float32")
-        next_state_batch = keras.ops.convert_to_tensor(
+        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
+        action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
+        reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
+        reward_batch = tf.cast(reward_batch, dtype="float32")
+        next_state_batch = tf.convert_to_tensor(
             self.next_state_buffer[batch_indices]
         )
 
         # Update the models
-        self.update(state_batch, action_batch, reward_batch, next_state_batch)
+        critic_loss, actor_loss = self.update(state_batch, action_batch, reward_batch, next_state_batch)
 
+        return critic_loss, actor_loss
 
 class DPPG:
     def __init__(self, num_states, num_actions, upper_bound, lower_bound):
@@ -189,7 +192,7 @@ class DPPG:
         inputs = layers.Input(shape=(self.num_states,))
         out = layers.Dense(256, activation="relu")(inputs)
         out = layers.Dense(256, activation="relu")(out)
-        outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
+        outputs = layers.Dense(self.num_actions, activation="tanh", kernel_initializer=last_init)(out)
 
         # Define output layer with tanh activation function scaled by the action bound
         outputs = outputs * self.upper_bound
@@ -234,7 +237,7 @@ class DPPG:
         :return: The action to be taken after clipping to ensure it's within bounds.
         """
 
-        sampled_actions = keras.ops.squeeze(actor_model(state))
+        sampled_actions = tf.squeeze(actor_model(state))
         noise = noise_object()
         sampled_actions = sampled_actions.numpy() + noise
 
@@ -242,6 +245,7 @@ class DPPG:
         legal_action = np.clip(sampled_actions, self.lower_bound, self.upper_bound)
 
         return [np.squeeze(legal_action)]
+        # return legal_action
 
     @staticmethod
     def update_target(target, original, tau):
