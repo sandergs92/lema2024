@@ -447,7 +447,7 @@ class SimulationRobobo(IRobobo):
 
         This only works in the simulation.
         """
-        orient = self._sim.getOBjectOrientation(self._robobo, self._sim.handle_world)
+        orient = self._sim.getObjectOrientation(self._robobo, self._sim.handle_world)
         return Orientation(*orient)
 
     def set_position(self, position: Position, orientation: Orientation) -> None:
