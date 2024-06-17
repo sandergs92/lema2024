@@ -104,7 +104,8 @@ class RoboboEnv(gym.Env):
                 imageFrame = cv2.rectangle(imageFrame, (x, y), (x + w, y + h), (255, 0, 0), 2)
                 cv2.putText(imageFrame, "Blue Colour", (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0))
 
-        print(green_detected, green_area)
+        print("Green detected: ", green_detected)
+        print("Green area (width X height): ", green_area)
 
         return green_detected, green_area
     
@@ -198,14 +199,18 @@ def run_all_actions(rob: IRobobo):
     if isinstance(rob, SimulationRobobo):
         rob.play_simulation()
 
-    
+    print("Phone tilt angle: ", rob.read_phone_tilt())
+
+    rob.set_phone_tilt(100, 100)
 
     while rob.nr_food_collected() == 0:
         img = rob.get_image_front()
         rob.move_blocking(50, 50, 500)
-        print(rob.nr_food_collected())
+        print("Food collected: ", rob.nr_food_collected())
 
     env.detect_color(img)
+
+    rob.sleep(5)
 
     rob.stop_simulation()
 
