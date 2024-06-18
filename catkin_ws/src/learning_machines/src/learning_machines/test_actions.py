@@ -196,34 +196,36 @@ def reverse(rob: IRobobo):
 def run_all_actions(rob: IRobobo):
     env = RoboboEnv(rob)
     
-    if isinstance(rob, SimulationRobobo):
-        rob.play_simulation()
+    for i in range(4):
+        if isinstance(rob, SimulationRobobo):
+            rob.play_simulation()
 
-    print("Phone tilt angle: ", rob.read_phone_tilt())
+        print("Phone tilt angle: ", rob.read_phone_tilt())
 
-    rob.set_phone_tilt(100, 100)
-    img = rob.get_image_front()
-    env.detect_color(img)
-
-    while rob.nr_food_collected() == 0:
+        rob.set_phone_tilt(100, 100)
         img = rob.get_image_front()
+        env.detect_color(img)
+
+    
+        while rob.nr_food_collected() == 0:
+            img = rob.get_image_front()
+            rob.move_blocking(-50, 50, 500)
+            rob.move_blocking(50, 50, 1000)
+            rob.move_blocking(50, -50, 500)
+            rob.move_blocking(50, 50, 1000)
+            print("Food collected: ", rob.nr_food_collected())
+
+        env.detect_color(img)
+
+        rob.move_blocking(50, 50, 500)
+        rob.move_blocking(100, 100, 500)
         rob.move_blocking(-50, 50, 500)
-        rob.move_blocking(50, 50, 1000)
-        rob.move_blocking(50, -50, 500)
-        rob.move_blocking(50, 50, 1000)
-        print("Food collected: ", rob.nr_food_collected())
+        rob.move_blocking(100, 100, 500)
+        rob.move_blocking(-50, 50, 500)
+        rob.move_blocking(100, 100, 500)
+        rob.move_blocking(-50, 50, 500)
 
-    env.detect_color(img)
-
-    rob.move_blocking(50, 50, 500)
-    rob.move_blocking(100, 100, 500)
-    rob.move_blocking(-50, 50, 500)
-    rob.move_blocking(100, 100, 500)
-    rob.move_blocking(-50, 50, 500)
-    rob.move_blocking(100, 100, 500)
-    rob.move_blocking(-50, 50, 500)
-
-    rob.sleep(5)
+        rob.sleep(5)
 
     rob.stop_simulation()
 
