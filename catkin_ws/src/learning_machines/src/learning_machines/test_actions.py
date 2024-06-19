@@ -207,8 +207,12 @@ def run_all_actions(rob: IRobobo, dataset):
     elif dataset == 'testing':
         model = DQN.load(f"{FIGRURES_DIR}/15000.zip")
         while True:
-            next_state = rob.read_irs()
-            next_state = np.array(next_state, dtype=np.float32)
+            # Get new observation
+            sensor_readings = rob.read_irs()
+            processed_image, black_percentage, original_percentage = process_image(rob.get_image_front())
+            # cv.imwrite(f"{FIGRURES_DIR}/{time.time()}.jpg", processed_image) 
+            resized_image = cv.resize(processed_image, (64,64), cv.INTER_AREA)
+            next_state = {"sensor_readings": np.array(sensor_readings, dtype=np.float32), "image": resized_image}
             action = model.predict(next_state)[0]
             if action == 0:
                 steer_left(rob)
