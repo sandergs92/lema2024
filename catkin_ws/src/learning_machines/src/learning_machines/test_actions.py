@@ -30,6 +30,7 @@ class RoboboEnv(gym.Env):
         self.reset()
         self.previous_actions = []
         self.explored_positions = set()
+        self.start_time = None
 
     def reset(self, seed=None, options=None):
         # Reset the state of the environment to an initial state
@@ -43,6 +44,7 @@ class RoboboEnv(gym.Env):
             state = [0.] * 8
         self.previous_actions = []
         self.explored_positions = set()
+        self.start_time = time.time()
         return np.array(state, dtype=np.float32), {}
 
     def step(self, action):
@@ -132,11 +134,52 @@ def run_all_actions(rob: IRobobo, dataset):
     elif dataset == 'validation':
         env = RoboboEnv(rob)
         env = Monitor(env, str(FIGRURES_DIR))
-        model = DQN.load(f"{FIGRURES_DIR}/15000.zip", env=env)
-        obs = env.reset()[0]
-        for _ in range(1000):
-            action, _states = model.predict(obs)
-            obs, reward, done, test, info = env.step(action)
+
+        # List of model paths and timesteps
+        model_timesteps = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000,
+                           11000, 12000, 13000, 14000, 15000, 17000, 18000, 19000, 20000,
+                           21000, 22000, 23000, 24000, 25000, 26000, 27000]
+        num_episodes = 1000  # Number of episodes to run for each model
+
+        for timestep in model_timesteps:
+            model_path = f"{FIGRURES_DIR}/{timestep}.zip"
+            model = DQN.load(model_path, env=env)
+
+            if isinstance(rob, SimulationRobobo):
+                rob.play_simulation()
+
+            rewards = []
+            survival_times = []
+
+            for episode in range(25):
+                obs = env.reset()[0]
+                total_reward = 0
+                done = False
+                start_time = time.time()
+
+                while not done:
+                    action, _states = model.predict(obs)
+                    obs, reward, done, test, info = env.step(action)
+                    total_reward += reward
+
+                    if time.time() - start_time > 180:
+                            done = True
+
+                end_time = time.time()
+                survival_time = end_time - start_time
+                survival_times.append(survival_time)
+                rewards.append(total_reward)
+
+            print(f"Results for model saved at {timestep} timesteps:")
+            print(f"Max reward: {max(rewards)}")
+            print(f"Min reward: {min(rewards)}")
+            print(f"STD reward: {np.std(rewards)}")
+            print(f"Avg reward: {sum(rewards) / len(rewards)}")
+            print(f"Max survival time: {max(survival_times)}")
+            print(f"Min survival time: {min(survival_times)}")
+            print(f"Avg survival time: {sum(survival_times) / len(survival_times)}")
+            print(f"All survival time: {survival_times}")
+            print(f"All rewards: {rewards}")
     elif dataset == 'testing':
         model = DQN.load(f"{FIGRURES_DIR}/15000.zip")
         while True:
