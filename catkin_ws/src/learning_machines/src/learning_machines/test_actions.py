@@ -30,6 +30,8 @@ class RoboboEnv(gym.Env):
         })
         self.current_num_food = 0
         self.start_time = time.time()
+        self.previous_distance_to_base = None
+        self.has_red_object = False
         self.reset()
 
     def reset(self, seed=None, options=None):
@@ -47,6 +49,14 @@ class RoboboEnv(gym.Env):
         self.robot.set_phone_tilt(100, 100)
         processed_image, black_percentage, original_percentage = process_image(self.robot.get_image_front())
         resized_image = cv.resize(processed_image, (64,64), cv.INTER_AREA)
+
+        # Initialize the previous distance to the base
+        robot_pos = self.robot.get_position()
+        base_pos = self.robot.base_position()
+        self.previous_distance_to_base = self.calculate_distance(robot_pos, base_pos)
+
+        self.has_red_object = False
+        
         return {"sensor_readings": np.array(state, dtype=np.float32), "image": resized_image}, {}
 
     def step(self, action):
@@ -58,7 +68,7 @@ class RoboboEnv(gym.Env):
             steer_right(self.robot)
         elif action == 2:
             gas(self.robot)
-        elif action == 3:
+        elif action == 3 and self.has_red_object == False:
             reverse(self.robot)
 
         # Wait for the action to complete
@@ -78,15 +88,18 @@ class RoboboEnv(gym.Env):
 
         return next_state, reward, done, False, info
 
-    def calc_blue_reward(self, blue_ori_percentage):
+    def calculate_distance(self, pos1, pos2):
+        return ((pos1.x - pos2.x) ** 2 + (pos1.y - pos2.y) ** 2) ** 0.5
+
+    def calc_red_reward(self, red_ori_percentage):
         reward = 0
         # TODO: check if Robobo has red object
         # TODO: if touching the red object - keep certain percentage of red in view?
 
 
         # Spotting reward and moving toward, penalize if no food in image
-        if blue_ori_percentage > 0.:
-            reward +=  50 * (blue_ori_percentage / 100)
+        if red_ori_percentage > 0.:
+            reward +=  50 * (red_ori_percentage / 100)
         else:
             reward -= 5
 
@@ -94,59 +107,77 @@ class RoboboEnv(gym.Env):
         if self.robot.nr_food_collected() > self.current_num_food:
             reward += 50
             self.current_num_food = self.robot.nr_food_collected()
+            self.has_red_object = True
 
         return reward
 
-    def calc_green_reward(self, green_ori_percentage):
+    def calc_green_reward(self, green_ori_percentage, action):
         reward = 0
-
-        # TODO: check that red object still in camera angle, otherwise change reward function
         
-        # Spotting reward and moving toward, penalize if no food in image
+        if self.has_red_object == True:
+            if action == 3:
+                reward -=10
+        
+        # Spotting reward and moving toward, penalize if no base in image
         if green_ori_percentage > 0.:
             reward += 50 * (green_ori_percentage / 100)
         else:
             reward -= 5
 
-        # TODO: if touching the red object - keep certain percentage of red in view?
+        robot_pos = self.robot.get_position()
+
+        current_distance_to_base = self.calculate_distance(robot_pos, self.robot.base_position())
+
+        # if self.previous_distance_to_base is not None and current_distance_to_base < self.previous_distance_to_base:
+        #     reward += 1
+        # elif self.previous_distance_to_base is not None and current_distance_to_base >= self.previous_distance_to_base:
+        #     reward -= 1
+
+        self.previous_distance_to_base = current_distance_to_base
 
         # Food reward
         if self.robot.base_detects_food():
             reward += 100
 
-        return reward 
+        return reward
 
     def compute_reward(self, next_state, action_taken, black_percentage, original_percentage):
-        blue_ori_percentage = original_percentage["blue"]
+        red_ori_percentage = original_percentage["red"]
         green_ori_percentage = original_percentage["green"]
         
         # Give time
         time_diff = time.time() - self.start_time
-        if time_diff >= 250:
+        if time_diff >= 180:
             return 0, True
-        
-        # Max distance from obstacle
-        max_distance = max(v for v in next_state["sensor_readings"] if v is not None)
-        if max_distance >= 300 and black_percentage >= 99.:  # Threshold distance for being too close to an obstacle
-            # print("Bumped in front of wall!")
-            return -100, True
 
+        # Max distance from obstacle, excluding FrontC (index 4)
+        max_distance = max(v for i, v in enumerate(next_state["sensor_readings"]) if i != 4 and v is not None)
+        if max_distance >= 300 and black_percentage >= 99.:  # Threshold distance for being too close to an obstacle
+            return -100, True
+        
         has_object = False
 
-        # task a - find red, approach, keep
-        blue_reward, has_object  = self.calc_blue_reward(blue_ori_percentage)
+        if next_state["sensor_readings"][4] > 300:
+            has_object = True
+
+        found_base = False
 
         if has_object:
             # task b - keep red, find green, approach
-            green_reward = self.calc_green_reward(green_ori_percentage)
+            green_reward = self.calc_green_reward(green_ori_percentage, action_taken)
+            found_base = True
         else:
+            red_reward = self.calc_red_reward(red_ori_percentage)
             green_reward = 0
 
         # Base rewards for actions
         base_reward = 2 if action_taken == 2 else -1
 
         # print(base_reward, food_reward, spot_reward)
-        total_reward = base_reward + blue_reward + green_reward
+        total_reward = base_reward + red_reward + green_reward
+
+        if found_base:
+            total_reward, True
 
         # End after 3 mins
         if self.robot.get_sim_time() >= 180:
@@ -159,8 +190,10 @@ class RoboboEnv(gym.Env):
         pass  # No rendering required for this example
 
 # # original - smaller boundaries
-def process_image(image, colors={'blue': [np.array([94, 80, 2]), np.array([120, 255, 255])],
-                                 'green': [np.array([33, 19, 105]), np.array([77, 255, 255])]}, min_area=500):
+def process_image(image, colors={'red1': [np.array([0, 70, 50]), np.array([10, 255, 255])],
+                                 'red2': [np.array([170, 70, 50]), np.array([180, 255, 255])],
+                                 'green': [np.array([33, 19, 105]), np.array([77, 255, 255])]}, min_area=2000):
+
 # larger upper and lower bound - larger boundaries
 # def process_image(image, colors={'green': [np.array([30, 20, 100]), np.array([90, 255, 255])]}, min_area=5000):
     def find_colors(frame, points):
@@ -202,6 +235,10 @@ def process_image(image, colors={'blue': [np.array([94, 80, 2]), np.array([120, 
 
     black_percentage = (black_pixels / total_pixels) * 100
 
+     # Merge the two red percentages into one
+    if 'red1' in color_percentages and 'red2' in color_percentages:
+        color_percentages['red'] = color_percentages.pop('red1') + color_percentages.pop('red2')
+
     return result, black_percentage, color_percentages
 
 def steer_left(rob: IRobobo):
@@ -227,10 +264,11 @@ def run_all_actions(rob: IRobobo, dataset):
 
         # Train the model
         TIMESTEPS = 1000
-        for i in range(1, 30):
+        for i in range(1, 15):
             # print('RUN: ', str(i))
             model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False)
             model.save(f"{FIGRURES_DIR}/{TIMESTEPS * i}")
+    
     elif dataset == 'validation':
         env = RoboboEnv(rob)
         env = Monitor(env, str(FIGRURES_DIR))
@@ -251,29 +289,35 @@ def run_all_actions(rob: IRobobo, dataset):
         print("Min reward:", min(rewards))
         print("Avg reward:", sum(rewards) / len(rewards) )
         print(rewards)
+    
     elif dataset == 'testing':
         model = DQN.load(f"{FIGRURES_DIR}/slow_model/1000.zip")
 
         if isinstance(rob, SimulationRobobo):
             rob.play_simulation()
         
-        rob.set_phone_tilt(100, 100)
+        rob.set_phone_tilt(109, 100)
 
         count = 0
 
         while True:
             # Get new observation
             sensor_readings = rob.read_irs()
+            # img = rob.get_image_front()
             cv.imwrite(f"{FIGRURES_DIR}/images_testing/image{count}.jpg", rob.get_image_front()) 
             processed_image, black_percentage, original_percentage = process_image(rob.get_image_front())
             cv.imwrite(f"{FIGRURES_DIR}/images_testing/processed_image{count}.jpg", processed_image) 
             resized_image = cv.resize(processed_image, (64,64), cv.INTER_AREA)
             cv.imwrite(f"{FIGRURES_DIR}/images_testing/resized_image{count}.jpg", processed_image) 
-            # next_state = {"sensor_readings": np.array(sensor_readings, dtype=np.float32), "image": resized_image}
+            next_state = {"sensor_readings": np.array(sensor_readings, dtype=np.float32), "image": resized_image}
 
-            print("Blue: ", original_percentage["blue"])
-            print("Green: ", original_percentage["green"])
-            # print(original_percentage["red"])
+            # print("Red: ", original_percentage["red"])
+            # print("Green: ", original_percentage["green"])
+
+            gas(rob)
+
+            print(sensor_readings)
+   
 
             # action = model.predict(next_state)[0]
             # if action == 0:
