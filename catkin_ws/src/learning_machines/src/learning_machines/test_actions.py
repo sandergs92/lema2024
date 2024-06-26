@@ -149,16 +149,29 @@ class RoboboEnv(gym.Env):
         time_diff = time.time() - self.start_time
         if time_diff >= 180:
             return 0, True
+        
+        if self.has_red_object == False:
+            red_reward = self.calc_red_reward(red_ori_percentage)
 
-        # Max distance from obstacle, excluding FrontC (index 4)
-        max_distance = max(v for i, v in enumerate(next_state["sensor_readings"]) if i != 4 and v is not None)
-        if max_distance >= 300 and black_percentage >= 99.:  # Threshold distance for being too close to an obstacle
-            return -100, True
+        if self.has_red_object:
+            # Max distance from obstacle, excluding FrontC (index 4)
+            max_distance = max(v for i, v in enumerate(next_state["sensor_readings"]) if i != 4 and v is not None)
+            if max_distance >= 300 and black_percentage >= 99.:  # Threshold distance for being too close to an obstacle
+                return -100, True
+        else:
+            # Max distance from obstacle
+            max_distance = max(v for v in next_state["sensor_readings"] if v is not None)
+            if max_distance >= 300 and black_percentage >= 99.:  # Threshold distance for being too close to an obstacle
+            # print("Bumped in front of wall!")
+                return -100, True
+
         
         has_object = False
 
         if next_state["sensor_readings"][4] > 300:
             has_object = True
+        else:
+            self.has_red_object = False
 
         found_base = False
 
@@ -167,7 +180,6 @@ class RoboboEnv(gym.Env):
             green_reward = self.calc_green_reward(green_ori_percentage, action_taken)
             found_base = True
         else:
-            red_reward = self.calc_red_reward(red_ori_percentage)
             green_reward = 0
 
         # Base rewards for actions
