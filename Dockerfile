@@ -1,6 +1,6 @@
 FROM ros:noetic
 
-# Makking sure our ROS node has ports to connect trough.
+# Making sure our ROS node has ports to connect through.
 # These are the ports specified in `rospy.init_node()` in hardware.py
 EXPOSE 45100
 EXPOSE 45101
@@ -8,7 +8,6 @@ EXPOSE 45101
 RUN apt-get update -y && apt-get install -y python3 python3-pip git && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies.
-
 # These are package requirements for the dependencies.
 # You should add to these if you add python packages that require c libraries to be installed
 RUN apt-get update -y && apt-get install ffmpeg libsm6 libxext6 ros-noetic-opencv-apps dos2unix -y && rm -rf /var/lib/apt/lists/*
